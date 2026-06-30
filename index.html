@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kate's Movie Vault</title>
+<meta name="description" content="A personal, filterable library of the greatest films, with a built-in randomizer and watch-tracking.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Work+Sans:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo-dot"></span>
+    <div>
+      <h1>Movie Vault</h1>
+      <p class="tagline" id="tagline">Loading the collection…</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-gold" id="surpriseBtn" title="Pick one at random from the current filters">
+      <span class="ico">🎲</span> Surprise me
+    </button>
+    <button class="btn btn-ghost" id="dataBtn" title="Backup, restore, view your watch history">
+      <span class="ico">💾</span> My data
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="search-wrap">
+      <input type="search" id="search" placeholder="Search title, director, actor…" autocomplete="off">
+    </div>
+
+    <div class="sort-wrap">
+      <label class="mini-label">Sort by</label>
+      <select id="sortSelect">
+        <option value="recommended">✨ Recommended for you</option>
+        <option value="rating">Rating (high → low)</option>
+        <option value="year_desc">Year (new → old)</option>
+        <option value="year_asc">Year (old → new)</option>
+        <option value="runtime_asc">Length (short → long)</option>
+        <option value="runtime_desc">Length (long → short)</option>
+        <option value="title">Title (A → Z)</option>
+        <option value="random">Shuffle</option>
+      </select>
+    </div>
+
+    <div class="seen-toggle">
+      <label class="mini-label">Watched</label>
+      <div class="seg" id="seenSeg">
+        <button data-seen="all" class="active">All</button>
+        <button data-seen="unseen">Not seen</button>
+        <button data-seen="seen">Seen</button>
+      </div>
+    </div>
+
+    <div class="length-wrap">
+      <label class="mini-label">Length: <span id="lenLabel">any</span></label>
+      <div class="len-buttons" id="lenButtons">
+        <button data-min="0" data-max="9999" class="active">Any</button>
+        <button data-min="0" data-max="90">&lt;90m</button>
+        <button data-min="90" data-max="120">90–120m</button>
+        <button data-min="120" data-max="150">120–150m</button>
+        <button data-min="150" data-max="9999">150m+</button>
+      </div>
+    </div>
+
+    <div class="facet" data-facet="categories">
+      <button class="facet-head">Categories <span class="chev">▾</span></button>
+      <div class="facet-body"><div class="chips" id="catChips"></div></div>
+    </div>
+
+    <div class="facet" data-facet="tags">
+      <button class="facet-head">Tags <span class="chev">▾</span></button>
+      <div class="facet-body">
+        <input type="search" class="facet-filter" id="tagFilter" placeholder="filter tags…">
+        <div class="chips chips-scroll" id="tagChips"></div>
+      </div>
+    </div>
+
+    <div class="facet" data-facet="director">
+      <button class="facet-head">Director <span class="chev">▾</span></button>
+      <div class="facet-body">
+        <input type="search" class="facet-filter" id="dirFilter" placeholder="filter directors…">
+        <div class="chips chips-scroll" id="dirChips"></div>
+      </div>
+    </div>
+
+    <div class="facet" data-facet="cast">
+      <button class="facet-head">Cast <span class="chev">▾</span></button>
+      <div class="facet-body">
+        <input type="search" class="facet-filter" id="castFilter" placeholder="filter actors…">
+        <div class="chips chips-scroll" id="castChips"></div>
+      </div>
+    </div>
+
+    <div class="facet" data-facet="source">
+      <button class="facet-head">Source list <span class="chev">▾</span></button>
+      <div class="facet-body"><div class="chips" id="srcChips"></div></div>
+    </div>
+
+    <button class="btn btn-ghost btn-block" id="clearBtn">Clear all filters</button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="result-bar">
+      <span id="resultCount">—</span>
+      <div class="active-filters" id="activeFilters"></div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" hidden>
+      <p>No movies match these filters.</p>
+      <button class="btn btn-ghost" onclick="App.clearFilters()">Clear filters</button>
+    </div>
+  </main>
+</div>
+
+<!-- SURPRISE MODAL -->
+<div class="modal-back" id="surpriseModal" hidden>
+  <div class="modal surprise-card">
+    <button class="modal-x" data-close>✕</button>
+    <div class="surprise-inner" id="surpriseInner"></div>
+    <div class="surprise-actions">
+      <button class="btn btn-ghost" id="rerollBtn">🎲 Reroll</button>
+      <button class="btn btn-violet" id="surpriseSeenBtn">Mark as seen</button>
+    </div>
+  </div>
+</div>
+
+<!-- DATA MODAL -->
+<div class="modal-back" id="dataModal" hidden>
+  <div class="modal data-card">
+    <button class="modal-x" data-close>✕</button>
+    <h2>My watch data</h2>
+    <p class="muted" id="dataStats">—</p>
+    <div class="data-actions">
+      <button class="btn btn-ghost" id="exportJsonBtn">⬇ Export JSON</button>
+      <button class="btn btn-ghost" id="exportCsvBtn">⬇ Export CSV (Sheets)</button>
+      <label class="btn btn-ghost file-btn">⬆ Import JSON<input type="file" id="importFile" accept="application/json" hidden></label>
+    </div>
+    <div class="sync-box">
+      <label class="mini-label">Google Sheet auto-sync (optional)</label>
+      <input type="url" id="syncUrl" placeholder="Paste your Apps Script Web App URL">
+      <p class="muted tiny">When set, every Seen / Like / Dislike is also POSTed to your Sheet. Setup steps are in the README.</p>
+    </div>
+    <h3>History</h3>
+    <div class="history" id="historyList"></div>
+  </div>
+</div>
+
+<!-- WHY POPOVER (reason) -->
+<div class="modal-back" id="whyModal" hidden>
+  <div class="modal why-card">
+    <button class="modal-x" data-close>✕</button>
+    <h3 id="whyTitle">Why?</h3>
+    <div class="why-rate">
+      <button data-rate="like" id="whyLike">👍 Liked it</button>
+      <button data-rate="dislike" id="whyDislike">👎 Didn't like it</button>
+    </div>
+    <textarea id="whyText" placeholder="Optional: what worked or didn't (helps the recommendations)"></textarea>
+    <button class="btn btn-violet btn-block" id="whySave">Save</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
