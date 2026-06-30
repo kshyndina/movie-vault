@@ -5,7 +5,7 @@ const App = (() => {
   let byId = {};
   let db = { actions: {}, syncUrl: '' };   // actions[id] = {seen, rate, why, ts}
   const state = {
-    search: '', seen: 'all', lenMin: 0, lenMax: 9999,
+    search: '', seen: 'unseen', lenMin: 0, lenMax: 9999,
     categories: new Set(), tags: new Set(), directors: new Set(), cast: new Set(), sources: new Set(),
     sort: 'recommended'
   };
@@ -192,10 +192,14 @@ const App = (() => {
 
   /* ---------- actions ---------- */
   function toggleSeen(id) {
-    const a = act(id); a.seen = !a.seen; a.ts = Date.now();
-    if (!a.seen) { /* keep rate/why; just unmark seen */ }
+    const a = act(id); const wasSeen = !!a.seen;
+    a.seen = !a.seen; a.ts = Date.now();
     save(); sync('seen', id, a); render();
-    toast(a.seen ? 'Marked as seen' : 'Unmarked');
+    if (a.seen && !wasSeen) {
+      openWhy(id, a.rate || null);   // newly marked seen -> always prompt for a rating
+    } else {
+      toast(a.seen ? 'Marked as seen' : 'Unmarked');
+    }
   }
   function openWhy(id, rate) {
     whyTargetId = id; whyRate = rate;
@@ -309,9 +313,9 @@ const App = (() => {
   function clearFilters() {
     state.search = ''; document.getElementById('search').value = '';
     ['categories', 'tags', 'directors', 'cast', 'sources'].forEach(k => state[k].clear());
-    state.lenMin = 0; state.lenMax = 9999; state.seen = 'all';
+    state.lenMin = 0; state.lenMax = 9999; state.seen = 'unseen';
     document.querySelectorAll('#lenButtons button').forEach((b, i) => b.classList.toggle('active', i === 0));
-    document.querySelectorAll('#seenSeg button').forEach((b) => b.classList.toggle('active', b.dataset.seen === 'all'));
+    document.querySelectorAll('#seenSeg button').forEach((b) => b.classList.toggle('active', b.dataset.seen === 'unseen'));
     document.getElementById('lenLabel').textContent = 'any';
     render();
   }
