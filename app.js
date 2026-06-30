@@ -173,6 +173,8 @@ const App = (() => {
       (prof.hasData && state.sort === 'recommended' ? `  ·  tuned to ${prof.liked} liked / ${prof.disliked} disliked` : '');
     renderActiveFilters();
     renderFacets();
+    const fc = activeFilterCount(), fb = document.getElementById('fbCount');
+    if (fb) { fb.hidden = fc === 0; fb.textContent = fc; }
   }
 
   function renderActiveFilters() {
@@ -283,8 +285,24 @@ const App = (() => {
   function cap(s) { return String(s).replace(/\b\w/g, c => c.toUpperCase()); }
   function fmtLen(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h${m ? ' ' + m + 'm' : ''}` : `${m}m`; }
   function gv(id) { const e = document.getElementById(id); return e ? e.value : ''; }
-  function show(id) { document.getElementById(id).hidden = false; }
-  function hide(id) { document.getElementById(id).hidden = true; }
+  const MODAL_IDS = ['surpriseModal', 'dataModal', 'whyModal'];
+  function anyModalOpen() { return MODAL_IDS.some(i => !document.getElementById(i).hidden); }
+  function sidebarOpen() { return document.getElementById('sidebar').classList.contains('open'); }
+  function updateLock() { document.body.classList.toggle('modal-open', anyModalOpen() || sidebarOpen()); }
+  function show(id) {
+    MODAL_IDS.forEach(i => { if (i !== id) document.getElementById(i).hidden = true; });
+    const el = document.getElementById(id); el.hidden = false; updateLock();
+    const f = el.querySelector('.modal-x'); if (f) { try { f.focus(); } catch (e) {} }
+  }
+  function hide(id) { document.getElementById(id).hidden = true; updateLock(); }
+  function closeAllModals() { MODAL_IDS.forEach(i => document.getElementById(i).hidden = true); updateLock(); }
+  function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebarBackdrop').hidden = false; updateLock(); }
+  function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarBackdrop').hidden = true; updateLock(); }
+  function debounce(fn, ms) { let t; return function () { const a = arguments; clearTimeout(t); t = setTimeout(() => fn.apply(null, a), ms); }; }
+  function activeFilterCount() {
+    return state.categories.size + state.tags.size + state.directors.size + state.cast.size + state.sources.size +
+      (state.seen !== 'all' ? 1 : 0) + (state.lenMin !== 0 || state.lenMax !== 9999 ? 1 : 0) + (state.search ? 1 : 0);
+  }
   let toastT; function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200); }
   function dl(name, content, type) { const b = new Blob([content], { type }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
 
@@ -300,9 +318,16 @@ const App = (() => {
 
   /* ---------- events ---------- */
   function wire() {
-    document.getElementById('search').addEventListener('input', e => { state.search = e.target.value.trim(); render(); });
+    const searchEl = document.getElementById('search');
+    searchEl.addEventListener('input', debounce(() => { state.search = searchEl.value.trim(); render(); }, 140));
     document.getElementById('sortSelect').addEventListener('change', e => { state.sort = e.target.value; render(); });
     document.getElementById('clearBtn').addEventListener('click', clearFilters);
+
+    // mobile sidebar
+    document.getElementById('mobileFilterBtn').addEventListener('click', openSidebar);
+    document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
+    document.getElementById('sidebarBackdrop').addEventListener('click', closeSidebar);
+    window.addEventListener('resize', () => { if (window.innerWidth > 820 && sidebarOpen()) closeSidebar(); });
 
     document.getElementById('seenSeg').addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -325,7 +350,7 @@ const App = (() => {
       }
       const head = e.target.closest('.facet-head'); if (head) head.parentElement.classList.toggle('collapsed');
     });
-    ['tagFilter', 'dirFilter', 'castFilter'].forEach(id => document.getElementById(id).addEventListener('input', renderFacets));
+    ['tagFilter', 'dirFilter', 'castFilter'].forEach(id => document.getElementById(id).addEventListener('input', debounce(renderFacets, 140)));
 
     // active filter removal
     document.getElementById('activeFilters').addEventListener('click', e => {
@@ -368,9 +393,9 @@ const App = (() => {
     document.getElementById('whySave').addEventListener('click', saveWhy);
 
     // generic modal close
-    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => e.target.closest('.modal-back').hidden = true));
-    document.querySelectorAll('.modal-back').forEach(mb => mb.addEventListener('click', e => { if (e.target === mb) mb.hidden = true; }));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-back').forEach(m => m.hidden = true); });
+    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => { e.target.closest('.modal-back').hidden = true; updateLock(); }));
+    document.querySelectorAll('.modal-back').forEach(mb => mb.addEventListener('click', e => { if (e.target === mb) { mb.hidden = true; updateLock(); } }));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAllModals(); closeSidebar(); } });
   }
 
   async function init() {

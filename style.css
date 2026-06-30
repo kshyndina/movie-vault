@@ -4,7 +4,10 @@
   --good:#2e9e6b; --bad:#d4604f; --radius:14px; --shadow:0 1px 3px rgba(40,20,60,.06),0 8px 24px rgba(40,20,60,.05);
 }
 *{box-sizing:border-box}
+/* bulletproof hide: author rules like .modal-back{display:flex} must NOT defeat [hidden] */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0}
+body.modal-open{overflow:hidden}
 body{font-family:"DM Sans",system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
 h1,h2,h3{font-family:"Work Sans",sans-serif;margin:0}
 button{font-family:inherit;cursor:pointer}
@@ -133,11 +136,18 @@ button{font-family:inherit;cursor:pointer}
 
 /* MOBILE */
 .mobile-filter-btn{display:none}
+.sidebar-close{display:none}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(28,18,40,.4);z-index:55;border:none}
 @media(max-width:820px){
   .layout{grid-template-columns:1fr}
-  .sidebar{position:fixed;top:0;left:0;height:100vh;max-height:none;width:300px;background:#fff;z-index:60;transform:translateX(-100%);transition:.25s;border-right:1px solid var(--line)}
+  .sidebar{position:fixed;top:0;left:0;height:100dvh;max-height:none;width:min(86vw,320px);background:#fff;z-index:60;transform:translateX(-100%);transition:transform .25s;border-right:1px solid var(--line);padding-top:14px}
   .sidebar.open{transform:none;box-shadow:0 0 60px rgba(0,0,0,.2)}
-  .mobile-filter-btn{display:inline-flex;position:fixed;bottom:20px;left:20px;z-index:55}
+  .sidebar-close{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:15px;color:var(--ink-soft);margin:0 0 6px auto}
+  .mobile-filter-btn{display:inline-flex;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:50;box-shadow:0 8px 24px rgba(122,75,160,.4)}
+  .mobile-filter-btn .fb-count{background:rgba(255,255,255,.25);border-radius:999px;padding:1px 7px;font-size:11px}
   .topbar h1{font-size:18px}
   .top-actions .btn{padding:8px 10px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+  .main{padding:16px 14px 90px}
 }
+@media(min-width:821px){ .sidebar-backdrop{display:none !important} }

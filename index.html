@@ -32,6 +32,7 @@
 <div class="layout">
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
+    <button class="sidebar-close" id="sidebarClose" aria-label="Close filters">✕</button>
     <div class="search-wrap">
       <input type="search" id="search" placeholder="Search title, director, actor…" autocomplete="off">
     </div>
@@ -120,6 +121,10 @@
     </div>
   </main>
 </div>
+
+<!-- MOBILE FILTERS -->
+<button class="btn btn-violet mobile-filter-btn" id="mobileFilterBtn">☰ Filters <span class="fb-count" id="fbCount" hidden></span></button>
+<div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 
 <!-- SURPRISE MODAL -->
 <div class="modal-back" id="surpriseModal" hidden>
