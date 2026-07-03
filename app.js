@@ -12,6 +12,7 @@ const App = (() => {
   };
   const EX_KEY = { categories: 'exCategories', tags: 'exTags' };  // facets that support exclude
   let whyTargetId = null, whyRate = null, surpriseCurrent = null;
+  let selectMode = false; const selected = new Set();   // multi-select state
 
   /* ---------- storage ---------- */
   function load() {
@@ -54,6 +55,7 @@ const App = (() => {
     const a = db.actions[m.id] || {};
     if (state.seen === 'seen' && !a.seen) return false;
     if (state.seen === 'unseen' && a.seen) return false;
+    if (state.seen === 'queue' && !(a.queue && !a.seen)) return false;
     const rt = m.runtime || 0;
     if (rt < state.lenMin || rt > state.lenMax) return false;
     if (state.exCategories.size && (m.categories || []).some(c => state.exCategories.has(c))) return false;
@@ -150,10 +152,11 @@ const App = (() => {
     const dirs = (m.director || []).join(', ');
     const cast = (m.cast || []).slice(0, 3).join(', ');
     const scoreTip = (state.sort === 'recommended' && prof.hasData && m._score) ? `<div class="score-tip ${m._score > 0.3 ? 'has' : ''}">${m._score > 0 ? '▲' : ''}${m._score.toFixed(1)}</div>` : '';
-    return `<article class="movie ${seen}" data-id="${m.id}">
-      <div class="poster" data-seenmark="SEEN">${posterHTML(m)}${m.rating ? `<div class="rating-badge">★ ${m.rating}</div>` : ''}${scoreTip}</div>
+    const isSel = selected.has(m.id);
+    return `<article class="movie ${seen} ${isSel ? 'sel' : ''}" data-id="${m.id}">
+      <div class="poster" data-seenmark="SEEN">${posterHTML(m)}${m.rating ? `<div class="rating-badge">★ ${m.rating}</div>` : ''}${scoreTip}${a.queue && !a.seen ? '<div class="queue-flag">🔖</div>' : ''}</div>
       <div class="body">
-        <div class="m-title">${esc(m.title)}</div>
+        <a class="m-title t-link" href="https://www.imdb.com/title/${m.id}/" target="_blank" rel="noopener" title="Open on IMDb">${esc(m.title)}</a>
         <div class="m-meta"><span>${m.year || ''}</span>${m.runtime ? `<span>${fmtLen(m.runtime)}</span>` : ''}</div>
         ${cats ? `<div class="m-cats">${cats}</div>` : ''}
         <div class="m-people">${dirs ? `<div>🎬 <b>${esc(dirs)}</b></div>` : ''}${cast ? `<div>★ ${esc(cast)}</div>` : ''}</div>
@@ -162,6 +165,7 @@ const App = (() => {
           <button class="act ${a.seen ? 'seen-on' : ''}" data-do="seen" title="Mark watched">${a.seen ? '✓ Seen' : '+ Seen'}</button>
           <button class="act ${rate === 'like' ? 'like-on' : ''}" data-do="like" title="Liked it">👍</button>
           <button class="act ${rate === 'dislike' ? 'dislike-on' : ''}" data-do="dislike" title="Didn't like it">👎</button>
+          <button class="act ${a.queue && !a.seen ? 'queue-on' : ''}" data-do="queue" title="Want to watch (queue)">🔖</button>
         </div>
       </div>
     </article>`;
@@ -193,7 +197,7 @@ const App = (() => {
     state.cast.forEach(v => add('★ ' + v, `cast|${v}`));
     state.sources.forEach(v => add(v, `sources|${v}`));
     if (state.lenMin !== 0 || state.lenMax !== 9999) add(document.getElementById('lenLabel').textContent, 'len|');
-    if (state.seen !== 'all') add(state.seen === 'seen' ? 'Seen' : 'Not seen', 'seen|');
+    if (state.seen !== 'all') add(state.seen === 'seen' ? 'Seen' : state.seen === 'queue' ? '🔖 Queue' : 'Not seen', 'seen|');
     wrap.innerHTML = out.join('');
   }
 
@@ -201,12 +205,55 @@ const App = (() => {
   function toggleSeen(id) {
     const a = act(id); const wasSeen = !!a.seen;
     a.seen = !a.seen; a.ts = Date.now();
+    if (a.seen) a.queue = false;   // watching it clears it from the queue (Letterboxd behavior)
     save(); sync('seen', id, a); render();
     if (a.seen && !wasSeen) {
       openWhy(id, a.rate || null);   // newly marked seen -> always prompt for a rating
     } else {
       toast(a.seen ? 'Marked as seen' : 'Unmarked');
     }
+  }
+  function toggleQueue(id) {
+    const a = act(id);
+    a.queue = !a.queue; a.ts = Date.now();
+    save(); sync('queue', id, a); render();
+    toast(a.queue ? 'Added to queue 🔖' : 'Removed from queue');
+  }
+
+  /* ---------- multi-select ---------- */
+  function setSelectMode(on) {
+    selectMode = on;
+    if (!on) selected.clear();
+    document.body.classList.toggle('select-mode', on);
+    document.getElementById('selectBtn').classList.toggle('sel-active', on);
+    document.getElementById('bulkBar').hidden = !on;
+    updateBulkBar(); render();
+  }
+  function toggleSel(id) {
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    const cardEl = document.querySelector(`.movie[data-id="${id}"]`);
+    if (cardEl) cardEl.classList.toggle('sel', selected.has(id));
+    updateBulkBar();
+  }
+  function updateBulkBar() {
+    const n = selected.size;
+    document.getElementById('bulkCount').textContent = `${n} selected`;
+    document.getElementById('bulkSeen').disabled = n === 0;
+    document.getElementById('bulkQueue').disabled = n === 0;
+  }
+  function bulkMarkSeen() {
+    if (!selected.size) return;
+    const n = selected.size;
+    selected.forEach(id => { const a = act(id); a.seen = true; a.queue = false; a.ts = Date.now(); sync('seen', id, a); });
+    save(); setSelectMode(false);
+    toast(`✓ ${n} marked as seen — rate them from the Seen view anytime`);
+  }
+  function bulkQueue() {
+    if (!selected.size) return;
+    const n = selected.size;
+    selected.forEach(id => { const a = act(id); if (!a.seen) { a.queue = true; a.ts = Date.now(); sync('queue', id, a); } });
+    save(); setSelectMode(false);
+    toast(`🔖 ${n} queued`);
   }
   function openWhy(id, rate) {
     whyTargetId = id; whyRate = rate;
@@ -251,7 +298,11 @@ const App = (() => {
       `<h2>${esc(m.title)}</h2>
        <div class="s-meta">${m.year || ''} · ${m.runtime ? fmtLen(m.runtime) : ''} · ★ ${m.rating || '—'} · ${(m.categories || []).map(cap).join(', ')}</div>
        <div class="s-meta">${(m.director || []).length ? '🎬 ' + esc(m.director.join(', ')) : ''}</div>
-       <div class="s-desc">${esc(m.desc || '')}</div>`;
+       <div class="s-desc">${esc(m.desc || '')}</div>
+       <div class="s-links">
+         <a href="https://www.imdb.com/title/${m.id}/" target="_blank" rel="noopener">IMDb ↗</a>
+         <a href="https://www.justwatch.com/us/search?q=${encodeURIComponent(m.title)}" target="_blank" rel="noopener">Where to watch ↗</a>
+       </div>`;
     document.getElementById('surpriseSeenBtn').textContent =
       (db.actions[m.id] && db.actions[m.id].seen) ? 'Seen ✓' : 'Mark as seen';
     show('surpriseModal');
@@ -263,9 +314,30 @@ const App = (() => {
     const seen = acts.filter(([, a]) => a.seen).length;
     const liked = acts.filter(([, a]) => a.rate === 'like').length;
     const disliked = acts.filter(([, a]) => a.rate === 'dislike').length;
-    document.getElementById('dataStats').textContent = `${seen} seen · ${liked} liked · ${disliked} disliked`;
+    const queued = acts.filter(([, a]) => a.queue && !a.seen).length;
+    document.getElementById('dataStats').textContent = `${seen} seen · ${liked} liked · ${disliked} disliked · ${queued} queued`;
+    // fun stats (Letterboxd-style): hours watched, top liked genres/directors, favorite decade
+    const seenMovies = acts.filter(([, a]) => a.seen).map(([id]) => byId[id]).filter(Boolean);
+    const mins = seenMovies.reduce((s, m) => s + (m.runtime || 0), 0);
+    const topOf = (getter, pool) => {
+      const c = {};
+      pool.forEach(m => (getter(m) || []).forEach(v => c[v] = (c[v] || 0) + 1));
+      return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([v, n]) => `${cap(v)} (${n})`).join(', ');
+    };
+    const likedMovies = acts.filter(([, a]) => a.rate === 'like').map(([id]) => byId[id]).filter(Boolean);
+    const decades = {};
+    seenMovies.forEach(m => { if (m.year) { const d = `${Math.floor(m.year / 10) * 10}s`; decades[d] = (decades[d] || 0) + 1; } });
+    const topDecade = Object.entries(decades).sort((a, b) => b[1] - a[1])[0];
+    const srows = [];
+    if (mins) srows.push(`⏱ <b>${Math.floor(mins / 60)}h ${mins % 60}m</b> watched`);
+    if (topDecade) srows.push(`📅 favorite decade: <b>${topDecade[0]}</b> (${topDecade[1]} films)`);
+    if (likedMovies.length) {
+      const g = topOf(m => m.categories, likedMovies); if (g) srows.push(`🎭 you like: <b>${esc(g)}</b>`);
+      const d = topOf(m => m.director, likedMovies); if (d) srows.push(`🎬 directors you like: <b>${esc(d)}</b>`);
+    }
+    document.getElementById('statsBox').innerHTML = srows.length ? srows.map(r => `<div class="stat-row">${r}</div>`).join('') : '';
     document.getElementById('syncUrl').value = db.syncUrl || '';
-    const rows = acts.filter(([, a]) => a.seen || a.rate).sort((x, y) => (y[1].ts || 0) - (x[1].ts || 0))
+    const rows = acts.filter(([, a]) => a.seen || a.rate || a.queue).sort((x, y) => (y[1].ts || 0) - (x[1].ts || 0))
       .map(([id, a]) => {
         const m = byId[id] || { title: id };
         const r = a.rate === 'like' ? '👍' : a.rate === 'dislike' ? '👎' : '👁';
@@ -278,10 +350,10 @@ const App = (() => {
     dl('movievault-data.json', JSON.stringify(db, null, 2), 'application/json');
   }
   function exportCSV() {
-    const head = 'imdb_id,title,year,seen,rating,why,updated\n';
+    const head = 'imdb_id,title,year,seen,queued,rating,why,updated\n';
     const rows = Object.entries(db.actions).filter(([, a]) => a.seen || a.rate).map(([id, a]) => {
       const m = byId[id] || {}; const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-      return [id, q(m.title), m.year || '', a.seen ? 'yes' : 'no', a.rate || '', q(a.why || ''), a.ts ? new Date(a.ts).toISOString() : ''].join(',');
+      return [id, q(m.title), m.year || '', a.seen ? 'yes' : 'no', (a.queue && !a.seen) ? 'yes' : 'no', a.rate || '', q(a.why || ''), a.ts ? new Date(a.ts).toISOString() : ''].join(',');
     }).join('\n');
     dl('movievault-data.csv', head + rows, 'text/csv');
   }
@@ -383,14 +455,44 @@ const App = (() => {
     });
 
     // grid actions (delegated)
-    document.getElementById('grid').addEventListener('click', e => {
+    const grid = document.getElementById('grid');
+    grid.addEventListener('click', e => {
+      const cardEl = e.target.closest('.movie');
+      if (selectMode) {                       // in select mode every card click = toggle selection
+        e.preventDefault();                   // (also stops the IMDb title link)
+        if (cardEl) toggleSel(cardEl.dataset.id);
+        return;
+      }
       const tagEl = e.target.closest('.tag-pill');
       if (tagEl) { const t = tagEl.dataset.tag; state.tags.add(t); render(); return; }
       const btn = e.target.closest('.act'); if (!btn) return;
-      const id = e.target.closest('.movie').dataset.id; const d = btn.dataset.do;
+      const id = cardEl.dataset.id; const d = btn.dataset.do;
       if (d === 'seen') toggleSeen(id);
+      else if (d === 'queue') toggleQueue(id);
       else openWhy(id, d);
     });
+
+    // long-press on a card enters select mode (mobile + desktop)
+    let lpTimer = null, lpMoved = false;
+    grid.addEventListener('pointerdown', e => {
+      const cardEl = e.target.closest('.movie'); if (!cardEl) return;
+      lpMoved = false;
+      lpTimer = setTimeout(() => {
+        if (lpMoved) return;
+        if (!selectMode) setSelectMode(true);
+        toggleSel(cardEl.dataset.id);
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, 500);
+    });
+    grid.addEventListener('pointermove', () => { lpMoved = true; clearTimeout(lpTimer); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => grid.addEventListener(ev, () => clearTimeout(lpTimer)));
+    grid.addEventListener('contextmenu', e => { if (selectMode) e.preventDefault(); });
+
+    // select mode controls
+    document.getElementById('selectBtn').addEventListener('click', () => setSelectMode(!selectMode));
+    document.getElementById('bulkSeen').addEventListener('click', bulkMarkSeen);
+    document.getElementById('bulkQueue').addEventListener('click', bulkQueue);
+    document.getElementById('bulkCancel').addEventListener('click', () => setSelectMode(false));
 
     // surprise
     document.getElementById('surpriseBtn').addEventListener('click', surprise);
@@ -415,7 +517,12 @@ const App = (() => {
     // generic modal close
     document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', e => { e.target.closest('.modal-back').hidden = true; updateLock(); }));
     document.querySelectorAll('.modal-back').forEach(mb => mb.addEventListener('click', e => { if (e.target === mb) { mb.hidden = true; updateLock(); } }));
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeAllModals(); closeSidebar(); } });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (selectMode && !anyModalOpen() && !sidebarOpen()) { setSelectMode(false); return; }
+        closeAllModals(); closeSidebar();
+      }
+    });
   }
 
   async function init() {

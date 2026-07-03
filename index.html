@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Work+Sans:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header class="topbar">
@@ -22,6 +22,9 @@
   <div class="top-actions">
     <button class="btn btn-gold" id="surpriseBtn" title="Pick one at random from the current filters">
       <span class="ico">🎲</span> Surprise me
+    </button>
+    <button class="btn btn-ghost" id="selectBtn" title="Select several films at once (or long-press any card)">
+      <span class="ico">☑</span> Select
     </button>
     <button class="btn btn-ghost" id="dataBtn" title="Backup, restore, view your watch history">
       <span class="ico">💾</span> My data
@@ -57,6 +60,7 @@
         <button data-seen="all">All</button>
         <button data-seen="unseen" class="active">Not seen</button>
         <button data-seen="seen">Seen</button>
+        <button data-seen="queue">🔖 Queue</button>
       </div>
     </div>
 
@@ -144,6 +148,7 @@
     <button class="modal-x" data-close>✕</button>
     <h2>My watch data</h2>
     <p class="muted" id="dataStats">—</p>
+    <div class="stats-box" id="statsBox"></div>
     <div class="data-actions">
       <button class="btn btn-ghost" id="exportJsonBtn">⬇ Export JSON</button>
       <button class="btn btn-ghost" id="exportCsvBtn">⬇ Export CSV (Sheets)</button>
@@ -173,8 +178,16 @@
   </div>
 </div>
 
+<!-- BULK SELECT BAR -->
+<div class="bulkbar" id="bulkBar" hidden>
+  <span class="bulk-count" id="bulkCount">0 selected</span>
+  <button class="btn btn-violet" id="bulkSeen">✓ Mark seen</button>
+  <button class="btn btn-ghost" id="bulkQueue">🔖 Queue</button>
+  <button class="btn btn-ghost" id="bulkCancel">✕ Done</button>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
