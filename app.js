@@ -7,8 +7,10 @@ const App = (() => {
   const state = {
     search: '', seen: 'unseen', lenMin: 0, lenMax: 9999,
     categories: new Set(), tags: new Set(), directors: new Set(), cast: new Set(), sources: new Set(),
+    exCategories: new Set(), exTags: new Set(),   // exclude-mode for categories & tags
     sort: 'recommended'
   };
+  const EX_KEY = { categories: 'exCategories', tags: 'exTags' };  // facets that support exclude
   let whyTargetId = null, whyRate = null, surpriseCurrent = null;
 
   /* ---------- storage ---------- */
@@ -54,6 +56,8 @@ const App = (() => {
     if (state.seen === 'unseen' && a.seen) return false;
     const rt = m.runtime || 0;
     if (rt < state.lenMin || rt > state.lenMax) return false;
+    if (state.exCategories.size && (m.categories || []).some(c => state.exCategories.has(c))) return false;
+    if (state.exTags.size && (m.tags || []).some(t => state.exTags.has(t))) return false;
     if (state.categories.size && !(m.categories || []).some(c => state.categories.has(c))) return false;
     if (state.tags.size && !(m.tags || []).some(t => state.tags.has(t))) return false;
     if (state.directors.size && !(m.director || []).some(d => state.directors.has(d))) return false;
@@ -115,11 +119,12 @@ const App = (() => {
     entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     if (opts.limit) entries = entries.slice(0, opts.limit);
     const sel = state[key];
-    // always show selected ones at top even if filtered out
-    const selExtra = [...sel].filter(v => !entries.find(e => e[0] === v)).map(v => [v, counts[v] || 0]);
+    const exSel = EX_KEY[key] ? state[EX_KEY[key]] : new Set();
+    // always show selected/excluded ones at top even if filtered out
+    const selExtra = [...sel, ...exSel].filter(v => !entries.find(e => e[0] === v)).map(v => [v, counts[v] || 0]);
     entries = [...selExtra, ...entries];
     el.innerHTML = entries.map(([v, n]) =>
-      `<button class="chip ${sel.has(v) ? 'on' : ''}" data-key="${key}" data-val="${esc(v)}">${esc(cap(v))} <span class="n">${n}</span></button>`
+      `<button class="chip ${sel.has(v) ? 'on' : ''} ${exSel.has(v) ? 'ex' : ''}" data-key="${key}" data-val="${esc(v)}" title="${EX_KEY[key] ? 'click: include · click again: exclude · again: off' : ''}">${exSel.has(v) ? '🚫 ' : ''}${esc(cap(v))} <span class="n">${n}</span></button>`
     ).join('') || '<span class="muted tiny">none</span>';
   }
 
@@ -182,6 +187,8 @@ const App = (() => {
     const add = (label, fn) => out.push(`<span class="af">${esc(label)}<button data-clear='${fn}'>✕</button></span>`);
     state.categories.forEach(v => add(cap(v), `categories|${v}`));
     state.tags.forEach(v => add('#' + cap(v), `tags|${v}`));
+    state.exCategories.forEach(v => add('🚫 ' + cap(v), `exCategories|${v}`));
+    state.exTags.forEach(v => add('🚫 #' + cap(v), `exTags|${v}`));
     state.directors.forEach(v => add('🎬 ' + v, `directors|${v}`));
     state.cast.forEach(v => add('★ ' + v, `cast|${v}`));
     state.sources.forEach(v => add(v, `sources|${v}`));
@@ -304,7 +311,7 @@ const App = (() => {
   function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebarBackdrop').hidden = true; updateLock(); }
   function debounce(fn, ms) { let t; return function () { const a = arguments; clearTimeout(t); t = setTimeout(() => fn.apply(null, a), ms); }; }
   function activeFilterCount() {
-    return state.categories.size + state.tags.size + state.directors.size + state.cast.size + state.sources.size +
+    return state.categories.size + state.tags.size + state.exCategories.size + state.exTags.size + state.directors.size + state.cast.size + state.sources.size +
       (state.seen !== 'all' ? 1 : 0) + (state.lenMin !== 0 || state.lenMax !== 9999 ? 1 : 0) + (state.search ? 1 : 0);
   }
   let toastT; function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2200); }
@@ -312,7 +319,7 @@ const App = (() => {
 
   function clearFilters() {
     state.search = ''; document.getElementById('search').value = '';
-    ['categories', 'tags', 'directors', 'cast', 'sources'].forEach(k => state[k].clear());
+    ['categories', 'tags', 'directors', 'cast', 'sources', 'exCategories', 'exTags'].forEach(k => state[k].clear());
     state.lenMin = 0; state.lenMax = 9999; state.seen = 'unseen';
     document.querySelectorAll('#lenButtons button').forEach((b, i) => b.classList.toggle('active', i === 0));
     document.querySelectorAll('#seenSeg button').forEach((b) => b.classList.toggle('active', b.dataset.seen === 'unseen'));
@@ -350,7 +357,16 @@ const App = (() => {
     document.querySelector('.sidebar').addEventListener('click', e => {
       const chip = e.target.closest('.chip'); if (chip) {
         const k = chip.dataset.key, v = chip.dataset.val;
-        state[k].has(v) ? state[k].delete(v) : state[k].add(v); render(); return;
+        if (EX_KEY[k]) {
+          // cycle: off -> include -> exclude -> off
+          const inc = state[k], exc = state[EX_KEY[k]];
+          if (inc.has(v)) { inc.delete(v); exc.add(v); }
+          else if (exc.has(v)) { exc.delete(v); }
+          else { inc.add(v); }
+        } else {
+          state[k].has(v) ? state[k].delete(v) : state[k].add(v);
+        }
+        render(); return;
       }
       const head = e.target.closest('.facet-head'); if (head) head.parentElement.classList.toggle('collapsed');
     });
