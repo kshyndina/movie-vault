@@ -421,7 +421,7 @@ const App = (() => {
   async function init() {
     load();
     try {
-      const res = await fetch('movies.json'); MOVIES = await res.json();
+      const res = await fetch('movies.json?v=6'); MOVIES = await res.json();
     } catch (e) { document.getElementById('tagline').textContent = 'Could not load movies.json'; return; }
     MOVIES.forEach(m => byId[m.id] = m);
     document.getElementById('tagline').textContent =
